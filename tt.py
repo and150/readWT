@@ -3,8 +3,10 @@ import math
 import datetime as dt
 
 import matplotlib.pyplot as plt
-import matplotlib
+import matplotlib.dates as md
+import matplotlib.ticker as ticker
 import numpy as np
+import pandas as pd
 
 VSTR = 2
 RSTR = 5
@@ -13,26 +15,22 @@ SEC_TOL = 5
 MIN_TOL = 5
 
 def readRegimes(inpFile):
-    arr = []
+    arr = {}
+    curr = {}
     with open(inpFile) as file:
         for line in file:
             words = str.split(line)
             if(len(words) > RSTR and  
                     words[1].count(".") == 2 and
                     words[2].count(":") == 2):
-                arr.append([
-                    dt.datetime.strptime(words[1]+' '+words[2],"%d.%m.%Y %H:%M:%S"),
-                    words[3:]
-                         ])
+                currDate = dt.datetime.strptime(words[1]+' '+words[2],"%d.%m.%Y %H:%M:%S")
+                curr = {currDate : words[3:]}
+                arr.update(curr)
     return arr
 
-def getMinMaxDate(regimes):
-    minDate = regimes[0][0]
-    maxDate = regimes[len(regimes)-1][0]
-    return [minDate, maxDate]
-
 def readVector(inpFile, dates_interval):
-    arr = []
+    arr = {}
+    curr ={}
     with open(inpFile) as file:
         for line in file:
             words = str.split(line)
@@ -42,30 +40,23 @@ def readVector(inpFile, dates_interval):
 
                 currDate = dt.datetime.strptime(words[0]+' '+words[1],"%d.%m.%Y %H:%M:%S")
                 if(currDate >= dates_interval[0] and currDate <= dates_interval[1] ):
-                    arr.append([currDate, words[2:]])
-
+                    curr = {currDate : words[2:]}
+                    arr.update(curr)
     return arr
 
 
-def extractDates(arr1):
+def extractValues(dict1, x,y):
     outArr =[]
-    for i in range(0, len(arr1)):
-        outArr.append(arr1[i][0])
-    return outArr
-
-def extractValues(arr1, x,y):
-    outArr =[]
-    for i in range(0, len(arr1)):
+    for z in dict1:
         try:
-            outArr.append(float(arr1[i][x][y]))
+            outArr.append(float(dict1[z][x][y]))
         except:
             outArr.append(0.0)
     return outArr
            
 
-
-
-def makeTimeFrame(r):
+def makeTimeFrame(regimeDict):
+    r = list(regimeDict.keys())
     tdarr = [
              dt.timedelta(hours = 0.01),
              dt.timedelta(hours = 0.02),
@@ -90,9 +81,9 @@ def makeTimeFrame(r):
 
     # insert additional dates (~log)
     for i in range(0, len_r - 1):
-        currDate = r[i][0] 
+        currDate = r[i] 
         count = 0
-        while(currDate < r[i+1][0]):
+        while(currDate < r[i+1]):
             currDate = currDate + tdarr[count]
             datesOutL.append(currDate)
             #print(currDate)
@@ -101,13 +92,13 @@ def makeTimeFrame(r):
 
     # insert zeros to override history
     for i in range(0, len_r - 1):
-        currDate = r[i][0] 
+        currDate = r[i] 
         #print("_", end="")
-        while(currDate < r[i+1][0]):
+        while(currDate < r[i+1]):
             datesOutZ.append(currDate)
             #print(currDate)
             currDate = nextDay(currDate)
-    currDate = r[len_r-1][0]
+    currDate = r[len_r-1]
     datesOutZ.append(currDate)
     #print("_", end="")
     #print(currDate)
@@ -139,53 +130,52 @@ def isDiffDay(date1, date2):
 
 
 def pickPress(p, dates):
-    pOut = []
+    dStack = dates[:]
+    pOut = {}
 
-    for i in range(0, len(dates)):
-        pOut = next(x for x in p if dates[i] in x)
-
+    while dStack:
+        find = dStack.pop(0)
+        if find in p:
+            pOut.update({find : p[find]})
+        else:
+            ff = min(p.keys(), key = lambda k: abs(k - find)) 
+            pOut.update({ff : p[ff]})
     return pOut
 
 
-def pickPress1(p, dates):
-    p_filt = []
-    for i in range(0, len(p)):
-        ifPicked = 0
-        j = 0
-        for t in range(j, len(dates)):
-            if(abs( (p[i][0] - dates[t]).seconds ) < 5):
-                p_filt.append(p[i])
-                j = j + 1
-    return p_filt
 
+def setup(ax):
+    ax.xaxis.set_major_formatter(md.DateFormatter('%d.%m.%Y'))
+    ax.xaxis.set_major_locator(md.DayLocator())
+    ax.xaxis.set_minor_locator(md.HourLocator())
+    #ax.tick_params(axis='x', which='major', length = 10, width = 5.0)
+    #ax.tick_params(axis='x', which='minor', length = 1, width = 0.5)
+ 
 
-
-def makeGraph(q, p, r, p_filt):
+def makeGraph(q, p, r, pf):
     # make graphs
-    dates = matplotlib.dates.date2num(extractDates(q))
-    dates1 = matplotlib.dates.date2num(extractDates(p))
-    dates2 = matplotlib.dates.date2num(extractDates(r))
-    dates3 = matplotlib.dates.date2num(extractDates(p_filt))
-    
-    qValues = extractValues(q,1,1)
-    pValues = extractValues(p,1,0)
-    rValues = extractValues(r,1,0)
-    pf_Values = extractValues(p_filt,1,0)
-    
+    qDates  = md.date2num(list(q.keys()))
+    pDates  = md.date2num(list(p.keys()))
+    rDates  = md.date2num(list(r.keys()))
+    pfDates = md.date2num(list(pf.keys()))
+
+    qValues  = list(float(item[0]) for item in list(q.values()))
+    pValues  = list(float(item[0]) for item in list(p.values()))
+    rValues  = list(float(item[0]) for item in list(r.values()))
+    pfValues = list(float(item[0]) for item in list(pf.values()))
+
     
     fig, ax1 = plt.subplots()
-    ax1.plot_date(dates, qValues, 'k-', drawstyle = 'steps')
-    
+    ax1.plot_date(qDates, qValues, 'k-', drawstyle = 'steps')
     ax2 = ax1.twinx()
-    ax2.plot_date(dates1, pValues, 'g.', markersize = 1)
-    
-    for i in range(0,len(dates2)):
-        plt.axvline(x = dates2[i], ymin = 0, linewidth = 0.5, color = 'red')
-        
-    ax2.plot_date(dates3, pf_Values, 'm.', markersize = 10)
-    
-    plt.show()
+    ax2.plot_date(pDates, pValues, 'g.', markersize = 1)
+    setup(ax2)
 
+    for i in range(0,len(rDates)):
+        plt.axvline(x = rDates[i], ymin = 0, linewidth = 0.5, color = 'red')
+       
+    ax2.plot_date(pfDates, pfValues, 'k.', markersize = 10)
+    plt.show()
 
 
 def Main():
@@ -195,49 +185,40 @@ def Main():
     parser.add_argument("-r","--REGIMES", action="store", help ="read regimes", default =None)
     args = parser.parse_args()
 
-    p = [] # pressure array
-    q = [] # rate array
+    p = {} # pressure dictionary
+    q = {} # rate dictionary
+    r = {} # regimes dictionary
 
-    r = [] # regimes array
+    pFilt = {} # filtered pressure dictionary
+    qFilt = {} # filtered rate dictionary
 
-    p_filt = [] # filtered pressure array
-    q_filt = [] # filtered rate array
-
-    pq_hist_out = [] # output array for WT file
-    dates_filt = [] # dates framework 
+    pqHistOut = [] # output array for WT file
+    tfw = [] # dates framework 
 
     if(args.RATE!=None and args.PRESS!=None and args.REGIMES!=None):
         r = readRegimes(args.REGIMES)
-        gdi_interval = getMinMaxDate(r)
+        gdiInterval = [min(r), max(r)]
 
         # generate time framework
-        dates_filt = makeTimeFrame(r)
-        #for i in range(0, len(dates_filt)):
-        #    print(dates_filt[i])
+        tfw = makeTimeFrame(r)
+        #for xx in tfw:
+        #    print(xx)
 
         # read P and Q vectors
-        q = readVector(args.RATE, gdi_interval)
-        p = readVector(args.PRESS, gdi_interval)
+        q = readVector(args.RATE,  gdiInterval)
+        p = readVector(args.PRESS, gdiInterval)
 
-        p_filt = pickPress(p, dates_filt)
+        pFilt = pickPress(p, tfw)
+        #for xx in pFilt:
+        #    print(xx, pFilt[xx])
 
-        for i in range(0, len(p_filt)):
-            print(p_filt[i][0], p_filt[i][1])
-        #print(p_filt)
-
-        ### print read data
-        ###for i in range(0,len(q)):
-        ###    print(q[i][0], q[i][1][1], q[i][1][2])
-        ###for i in range(0,len(p)):
-        ###    print(p[i][0], p[i][1][0])
-        ###for i in range(1,len(r)):
-        ###    print(r[i][0], r[i][1][0], r[i][0] - r[i-1][0])
-
-        makeGraph(q, p, r, p_filt)
+        #print(list(item[0] for item in list(q.values())))
+        #print(extractValues(q, 1, 1))
+    
+        makeGraph(q, p, r, pFilt)
 
     else:
         print("No input files")
-
 
 
 # start main programm
