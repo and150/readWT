@@ -7,12 +7,11 @@ import matplotlib.dates as md
 import matplotlib.ticker as ticker
 import numpy as np
 import pandas as pd
+#from collections import OrderedDict
 
 VSTR = 2
 RSTR = 5
-TIME_TOL = 0.01
-SEC_TOL = 5  
-MIN_TOL = 5
+
 
 def readRegimes(inpFile):
     arr = {}
@@ -177,6 +176,32 @@ def makeGraph(q, p, r, pf):
     ax2.plot_date(pfDates, pfValues, 'k.', markersize = 10)
     plt.show()
 
+def makeEtab(pressFiltered, regimes):
+    commonTimeFrame = list(set([*regimes, *pressFiltered]))
+    commonTimeFrame.sort()
+
+    eventTable = []
+    prevrr = [None]
+
+    for time in commonTimeFrame:
+
+        if time in pressFiltered:
+            pp = float(*pressFiltered[time])
+        else:
+            pp = 0.01
+
+        if time in regimes:
+            rr = regimes[time] 
+            prevrr = regimes[time]
+        else:
+            rr = prevrr + ['add'] 
+
+
+        eventTable.append([time, pp, *rr])
+
+    for xx in eventTable:
+        print(*xx)
+
 
 def Main():
     parser = argparse.ArgumentParser()
@@ -201,25 +226,17 @@ def Main():
 
         # generate time framework
         tfw = makeTimeFrame(r)
-        #for xx in tfw:
-        #    print(xx)
 
         # read P and Q vectors
         q = readVector(args.RATE,  gdiInterval)
         p = readVector(args.PRESS, gdiInterval)
-
         pFilt = pickPress(p, tfw)
-        #for xx in pFilt:
-        #    print(xx, pFilt[xx])
 
-        #print(list(item[0] for item in list(q.values())))
-        #print(extractValues(q, 1, 1))
-    
+        makeEtab(pFilt, r)
+
         makeGraph(q, p, r, pFilt)
-
     else:
         print("No input files")
-
 
 # start main programm
 Main()
